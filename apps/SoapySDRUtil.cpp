@@ -170,6 +170,9 @@ double currentFrequency = 0;
 bool currentSampleRateSet = false;
 double currentSampleRate = 0;
 int currentBufferSize = 1024*96;
+bool currentGainSet = false;
+double currentGain = 0;
+bool currentAGC = false;
 bool signalReceivedDoExit = false;
 
 static void channel(void)
@@ -198,6 +201,18 @@ static void buffersize(void)
     std::string argStr;
     if (optarg != NULL) currentBufferSize = atoi(optarg);
     else std::cerr << "Missing argument for --buffersize." << std::endl;
+}
+
+static void gain(void)
+{
+    std::string argStr;
+    if (optarg != NULL)
+    {
+        if(!strcmp(optarg,"auto")) currentAGC = true;
+        else { currentAGC = false; currentGain = atoi(optarg); }
+        currentGainSet = true;
+    }
+    else std::cerr << "Missing argument for --gain." << std::endl;
 }
 
 /***********************************************************************
@@ -236,9 +251,29 @@ static int receive(void)
         //if(!foundSampleRate) throw std::runtime_error(std::string("invalid sample rate, use --info to show valid sample rates"));
         if(currentSampleRate<=0) throw std::runtime_error(std::string("invalid sample rate"));
 
+        if(currentGainSet)
+        {
+            if(currentAGC)
+            {
+                if(!device->hasGainMode(SOAPY_SDR_RX, currentChannel))
+                    throw std::runtime_error(std::string("device does not have auto gain mode"));
+            }
+            else
+            {
+                SoapySDR::Range gainRange = device->getGainRange(SOAPY_SDR_RX, currentChannel);
+                if(gainRange.minimum() > currentGain || gainRange.maximum() < currentGain)
+                    throw std::runtime_error(std::string("gain out of range, use --info to show valid range"));
+            }
+        }
+
         //Set device
         device->setSampleRate(SOAPY_SDR_RX, currentChannel, currentSampleRate);
         device->setFrequency(SOAPY_SDR_RX, currentChannel, currentFrequency);
+        if(currentGainSet)
+        {
+            device->setGainMode(SOAPY_SDR_RX, currentChannel, currentAGC);
+            device->setGain(SOAPY_SDR_RX, currentChannel, currentGain);
+        }
 
         double fullScale;
         std::string nativeStreamFormatStr = device->getNativeStreamFormat(SOAPY_SDR_RX, currentChannel, fullScale);
@@ -334,11 +369,12 @@ int main(int argc, char *argv[])
         {"frequency", required_argument, 0, 'F'},
         {"samplerate", required_argument, 0, 'S'},
         {"buffersize", required_argument, 0, 'B'},
+        {"gain", required_argument, 0, 'G'},
         {0, 0, 0,  0}
     };
     int long_index = 0;
     int option = 0;
-    while ((option = getopt_long(argc, argv, "hf:m:i:p:c:r:C:F:S:B:", long_options, &long_index)) != -1)
+    while ((option = getopt_long(argc, argv, "hf:m:i:p:c:r:C:F:S:B:G:", long_options, &long_index)) != -1)
     {
         switch (option)
         {
@@ -353,8 +389,9 @@ int main(int argc, char *argv[])
         case 'F': frequency(); break;
         case 'S': samplerate(); break;
         case 'B': buffersize(); break;
+        case 'G': gain(); break;
         }
-    }
+    } //TODO: order should not make sense, but shouldn't be able to --transmit and --receive together
 
     //unknown or unspecified options, do help...
     return printHelp();
