@@ -5,6 +5,7 @@
 #include <SoapySDR/Modules.hpp>
 #include <SoapySDR/Registry.hpp>
 #include <SoapySDR/Device.hpp>
+#include <SoapySDR/Formats.hpp>
 #include <cstdlib>
 #include <cstddef>
 #include <iostream>
@@ -241,12 +242,9 @@ static int receive(void)
 
         double fullScale;
         std::string nativeStreamFormatStr = device->getNativeStreamFormat(SOAPY_SDR_RX, currentChannel, fullScale);
-        const char* nativeStreamFormat = nativeStreamFormatStr.c_str();
-        char* nativeStreamFormatBits = (char*)nativeStreamFormat;
-        while(*nativeStreamFormatBits && !(*nativeStreamFormatBits<='9' && *nativeStreamFormatBits>='0')) nativeStreamFormatBits++;
-        int numBytesPerSample = atoi(nativeStreamFormatBits)/8;
-        if(nativeStreamFormat[0]=='C') numBytesPerSample *= 2;
-        std::cerr << "numBytesPerSample = " << numBytesPerSample << std::endl;
+        int numBytesPerSample = SoapySDR::formatToSize(nativeStreamFormatStr);
+
+        //std::cerr << "numBytesPerSample = " << numBytesPerSample << std::endl;
 
         std::vector<size_t> currentChannels;
         currentChannels.push_back(currentChannel);
